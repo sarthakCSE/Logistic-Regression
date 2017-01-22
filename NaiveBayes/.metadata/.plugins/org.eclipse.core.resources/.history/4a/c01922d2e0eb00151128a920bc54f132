@@ -1,0 +1,230 @@
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileFilter;
+import java.io.FileReader;
+import java.io.FilenameFilter;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Scanner;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+public class Log {
+    
+    HashMap ham = new HashMap();
+    HashMap wtMap = new HashMap();
+    HashMap spam = new HashMap();
+    HashMap hamTest = new HashMap();
+    HashMap spamTest = new HashMap();
+    HashMap pH = new HashMap();
+    HashMap pS = new HashMap();
+    HashMap total = new HashMap();
+    ArrayList dw = new ArrayList();
+    ArrayList<HashMap <String, Integer>> myList = new ArrayList<HashMap <String, Integer>>();
+    ArrayList prMap = new ArrayList();
+    Set<String> HamWords = new HashSet<>();
+    Set<String> SpamWords = new HashSet<>();
+    Set<String> HamWordsTest = new HashSet<>();
+    Set<String> SpamWordsTest = new HashSet<>();
+    Set<String> words = new HashSet<>();
+    Set<String> stopwords = new HashSet<>();
+	List<String> mainString = new ArrayList<>();	
+    String filesource;
+    double probH = 0.73;
+    double probS = 1 - probH;
+    double probHDefault = 1, probSDefault = 1;
+    int countHam =0, countSpam = 0;
+    boolean isStopWord = true, insideLR = false;
+    
+    void getAllData(String folderPath) throws IOException{
+        filesource = folderPath;
+        File f = new File(folderPath);
+        FilenameFilter wordFilter;       
+              
+        wordFilter = new FilenameFilter() {
+        	@Override
+            public boolean accept(File dir, String name)
+        	{
+                return name.toLowerCase().endsWith(".txt");
+            }
+			
+        };     
+
+    }  
+
+
+    private void showMaps() {
+        int v = (int) ham.get("subject");
+        ham.put("subject", v+340);
+        int v1 = (int) spam.get("subject");
+        spam.put("subject", v1+123);
+    }
+   
+  	
+    void prediction() throws IOException{
+        mainString.clear();
+        getAllData("Database\\test\\ham");
+        getAllData("Database\\test\\spam");        
+        double AccuracyH = ((double)(countHam)/348)*100;
+        double AccuracyS = ((double)(countSpam)/130)*100;
+        double TotalAccuracy = ((double)(countHam+countSpam)/478)*100;
+        System.out.println("Ham accuracy = "+AccuracyH+"\nSpam accuracy = "+AccuracyS+"\nOverall Accuracy = "+TotalAccuracy);
+        cHam = 0;
+        cSpam = 0;
+        if(isLR){
+            isStopWord = true;
+            cHam = 0;
+            cSpam = 0;
+            clearAll();
+        }
+    }
+    
+    void initLRL2() throws IOException{
+        total.replaceAll((k,v) -> 0);
+        insideLR = true;
+        getAllData("Database\\train\\ham");//create voacbulary based on Ham and store in vocabHamTest
+        getAllData("Database\\train\\spam");//create voacbulary based on Spam and store in vocabSpamTest
+        wtMap.putAll(total);
+        wtMap.replaceAll((k,v) -> 1);       //initialize all weights to 1
+        for(int i=1;i<=463;i++)     //initialize all probability values to 0.5
+            prMap.add(i, 0.5);
+        for(int iteration=1;iteration<=100;iteration++){
+            calculateProbMatrix();
+            for(int i=1;i<=wtMap.size();i++)
+                dw.set(i, 0);   //initialize all dw to 0
+            calculateDW();
+            calculateWeights();
+        }
+    
+}
+    
+    private void calculateWeights() {
+        Set s = wtMap.entrySet();
+        int j = 1;
+        Iterator i = s.iterator();
+        while(i.hasNext()){
+            Map.Entry m = (Map.Entry) i.next();
+            double k = (double) m.getValue();
+            double dwV = (double) dw.get(j);
+            double exp = k+0.05*(dwV-0.005*k);      //neta = 0.05, lambda = 0.005
+            m.setValue(exp);
+        }
+    }
+    
+    private Object findProb(int a) {
+        double sum = 0.0;
+        HashMap<String, Integer> tmpData = (HashMap<String, Integer>) myList.get(a);
+        Set<String> key = tmpData.keySet();
+        Iterator it = key.iterator();
+        while (it.hasNext()) {
+            String hmKey = (String)it.next();
+            sum = sum + tmpData.get(hmKey)*(int)wtMap.get(hmKey);
+        }
+        sum+=1;
+    
+        return Math.exp(sum)/(1+Math.exp(sum));
+        
+    }
+    
+    private void calculateDW() {
+        for(int i=1;i<=wtMap.size();i++){       //go over all the weights
+            int cV;
+            if(i>340)
+                cV = 1;
+            else
+                cV = 0;
+            
+            for(int j=1;j<=prMap.size();j++){   //go over all training examples
+                HashMap<String, Integer> tmpData = (HashMap<String, Integer>) myList.get(j);
+                Set<String> key = tmpData.keySet();
+                Iterator it = key.iterator();
+                String hmKey = (String) it.next();
+                dw.set(i, (double)dw.get(i)+(double)tmpData.get(hmKey)*(double)(cV-(double)prMap.get(j)));
+                
+            }
+            
+        }
+    }
+    
+    private void calculateProbMatrix() {
+        for (int a =1; a<myList.size();a++){
+            prMap.set(a, (double) findProb(a));
+        }
+    }
+    
+    public void calculateLRL2() throws IOException{        
+        total.putAll(ham);
+        Set s = spam.entrySet();
+        Iterator i = s.iterator();
+        while(i.hasNext()){
+            Map.Entry m = (Map.Entry) i.next();
+            if(total.containsKey(m.getKey()))
+                total.put(m.getKey(), (int) total.get(m.getKey()) + (int) m.getValue());
+            else
+                total.put(m.getKey(),  m.getValue());   
+        }
+
+    }
+    public void getStopWords() throws IOException
+    {    
+	
+        Scanner file = new Scanner(new File("Database\\stopword.txt"));          
+
+        while(file.hasNext()){
+            String line = file.nextLine();             
+            String[] wordlist = line.split(" ");
+           
+                stopwords.addAll(Arrays.asList(wordlist));
+            }
+        }  
+    
+    
+    private void clearAll() {
+        
+        vocabHam.clear();
+        vocabSpam.clear();
+        vocabHamTest.clear();
+        vocabSpamTest.clear();
+        vocab.clear();
+        total.clear();
+        wMap.clear();
+        ham.clear();
+        spam.clear();
+        hamTest.clear();
+        spamTest.clear();
+        probHam.clear();
+        probSpam.clear();
+        filterStr.clear();
+        cHam = 0;
+        cSpam = 0;
+        isLR = false;
+    }
+    
+	 public static void main(String[] args) throws IOException  
+	{        
+		String HamLoc = args[0];
+		String SpamLoc = args[1];
+        Log NBStop = new Log();
+        NBStop.getAllData(HamLoc);
+        NBStop.getAllData(SpamLoc);        
+        NBStop.showMaps();
+        NBStop.prediction();
+        NBStop.calculateLRL2();//it only creates total hashmap used in other initLR2 implementation
+        NBStop.initLRL2();       //call predictHamSpam() inside this method. It has to clear existing Data structures and other ham/spam counters
+        NBStop.getStopWords();
+
+    }
+    
+	
+}
